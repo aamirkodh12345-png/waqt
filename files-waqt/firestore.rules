@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Trage hier die 4 UIDs ein (Firebase-Konsole → Authentication → Nutzer).
+    // Wer sich sonst noch registriert, sieht und schreibt nichts.
+    function member() {
+      return request.auth != null
+        && request.auth.uid in ['UID_1', 'UID_2', 'UID_3', 'UID_4'];
+    }
+
+    match /users/{uid} {
+      allow read: if member();
+      allow create: if member() && request.auth.uid == uid
+                    && request.resource.data.totalPoints == 0;
+      // nur das eigene Profil; Punkte dürfen nur steigen (höchstens 450 pro Schreibvorgang)
+      allow update: if member() && request.auth.uid == uid
+                    && request.resource.data.totalPoints >= resource.data.totalPoints
+                    && request.resource.data.totalPoints - resource.data.totalPoints <= 450;
+      allow delete: if false;
+
+      // Moschee-Koordinaten und Einstellungen: nur du selbst
+      match /private/{doc} {
+        allow read, write: if member() && request.auth.uid == uid;
+      }
+    }
+
+    match /prayers/{id} {
+      allow read: if member();
+      // Nur für dich selbst, nur einmal pro Gebet und Tag (feste ID), höchstens 24 h alt, nicht aus der Zukunft
+      allow create: if member()
+        && id.matches(request.auth.uid + '_[0-9]{4}-[0-9]{2}-[0-9]{2}_(fajr|dhuhr|asr|maghrib|isha)')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.place in ['home', 'mosque']
+        && request.resource.data.points is int
+        && request.resource.data.points >= 0 && request.resource.data.points <= 450
+        && request.resource.data.at <= request.time + duration.value(5, 'm')
+        && request.resource.data.at + duration.value(24, 'h') > request.time;
+      allow update, delete: if false;          // Einträge sind unveränderlich
+    }
+
+    match /photos/{id} {
+      allow read: if member();
+      allow create: if member()
+        && id.matches(request.auth.uid + '_.*')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.dataUrl.size() < 200000;
+      allow delete: if member() && resource.data.uid == request.auth.uid;   // eigene Fotos aufräumen
+      allow update: if false;
+    }
+  }
+}

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Waqt – Gebetszeiten für dich und drei Freunde</title>
+<meta name="theme-color" content="#004E64">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,200..500&family=Noto+Kufi+Arabic:wght@200..500&display=swap">
+
+<!-- Firebase-Version an EINER Stelle: die Nummer aus dem CDN-Snippet deiner Firebase-Konsole übernehmen -->
+<script type="importmap">
+{ "imports": {
+  "firebase/app": "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js",
+  "firebase/auth": "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js",
+  "firebase/firestore": "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js"
+} }
+</script>
+
+<style>
+/* ── Design-Tokens: nur zwei Farben, dazu Abstufungen ── */
+:root{
+  --deep:#004E64;      /* Tiefsee: Bühne, Handy-Screen, Text im App-Bereich */
+  --deep-900:#00303D;  /* dunkler Ton: Gehäuse, Dialoge */
+  --deep-500:#437B8C;  /* mittlere Stufe */
+  --mist:#E0E5E9;      /* Nebel: Text auf der Bühne, Fläche des App-Bereichs */
+  --mist-300:#B7C2CA;
+  --tilt:-9deg;        /* Winkel des Handys: liegt fest im CSS, GSAP fasst ihn nie an */
+  --lat:"Archivo",system-ui,sans-serif;
+  --ar:"Noto Kufi Arabic","Amiri",serif;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--deep)}
+body{color:var(--mist);font:300 1.0625rem/1.65 var(--lat);-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+button,input,select{font:inherit;color:inherit}
+
+/* ── Bühne (ohne JS: ruhige, statische Seite) ── */
+.stage{position:relative;min-height:100svh;display:grid;justify-items:center;align-content:center;gap:2.4rem;padding:12vh 6vw 8vh;overflow:hidden}
+.halo{position:absolute;left:50%;top:50%;width:140vmax;height:140vmax;margin:-70vmax 0 0 -70vmax;border-radius:50%;pointer-events:none;
+  background:
+    radial-gradient(closest-side,transparent 49.7%,rgba(224,229,233,.09) 50%,transparent 50.3%),
+    radial-gradient(closest-side,transparent 34.7%,rgba(224,229,233,.07) 35%,transparent 35.3%),
+    radial-gradient(closest-side,transparent 21.7%,rgba(224,229,233,.06) 22%,transparent 22.3%)}
+.brand{display:flex;align-items:baseline;gap:1rem}
+.brand h1{font-stretch:125%;font-weight:200;font-size:clamp(2.6rem,8vw,5.5rem);letter-spacing:-.01em;line-height:1}
+.brand .ar{font:200 clamp(1.8rem,4.6vw,3.4rem)/1 var(--ar);opacity:.7}
+.copy{max-width:24ch;font-stretch:125%;font-weight:200;font-size:clamp(1.3rem,2.6vw,2.1rem);line-height:1.3}
+
+/* ── Bühne mit Motion (fx.js setzt html.motion) ── */
+.motion .stage{height:100svh;min-height:0;padding:0;display:grid;place-items:center}
+.motion .brand{position:absolute;top:max(5vh,env(safe-area-inset-top));left:6vw}
+.motion .copy{position:absolute}
+.motion .c1{left:6vw;top:38%}
+.motion .c2{right:6vw;top:38%;text-align:right}
+.motion .c3{left:0;right:0;margin-inline:auto;bottom:8vh;text-align:center;max-width:28ch}
+@media (max-width:760px){
+  .motion .c1,.motion .c2{left:6vw;right:6vw;top:auto;bottom:7vh;max-width:none;text-align:left}
+}
+
+/* ── Handy ── */
+.phone{position:relative;width:clamp(210px,60vw,290px);aspect-ratio:9/18.6;will-change:transform}
+.tilt{width:100%;height:100%;transform:rotate(var(--tilt))}
+.body{width:100%;height:100%;padding:3.6%;border-radius:15%/7.2%;background:var(--deep-900);
+  box-shadow:0 0 0 1px rgba(224,229,233,.28),0 50px 90px -40px rgba(0,0,0,.6)}
+.screen{position:relative;width:100%;height:100%;border-radius:12%/5.8%;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.1rem;
+  background:radial-gradient(120% 70% at 50% 6%,#0a637d 0%,var(--deep) 46%,var(--deep-900) 100%)}
+.screen::before{content:"";position:absolute;top:2.4%;left:50%;width:27%;height:2.1%;margin-left:-13.5%;border-radius:99px;background:#001a22}
+#dial{display:block;width:94%;height:auto}
+.next{min-height:1.7em;font-size:.92rem;letter-spacing:.02em;opacity:.85;text-align:center}
+
+/* ── Uhr (SVG) ── */
+#dial .rim{fill:none;stroke:var(--mist);stroke-opacity:.45;stroke-width:.8}
+#dial .tick{stroke:var(--mist);stroke-opacity:.32;stroke-width:.8}
+#dial .tick.big{stroke-opacity:.75}
+#dial .win{fill:none;stroke:var(--mist);stroke-opacity:.22;stroke-width:2.2;stroke-linecap:round;stroke-dasharray:1;transition:stroke-opacity .6s,stroke-width .6s}
+#dial .win.on{stroke-opacity:1;stroke-width:3.4}
+#dial .nm{font:300 24px var(--ar);fill:var(--mist);fill-opacity:.55;transition:fill-opacity .6s}
+#dial .nm.on{fill-opacity:1;font-weight:400}
+#dial .h,#dial .m,#dial .s{stroke:var(--mist);stroke-linecap:round}
+#dial .h{stroke-width:2.2}
+#dial .m{stroke-width:1.4}
+#dial .s{stroke-width:.7;stroke-opacity:.85}
+#dial .cap{fill:var(--deep-900);stroke:var(--mist);stroke-width:1}
+
+/* ── App-Bereich: hell, Haarlinien statt Karten, viel Luft ── */
+#app{background:var(--mist);color:var(--deep);padding:16vh 6vw 24vh}
+.wrap{max-width:46rem;margin-inline:auto}
+#app h2{font-stretch:125%;font-weight:200;font-size:clamp(2rem,6.4vw,3.8rem);letter-spacing:-.01em;line-height:1.08;margin-bottom:1.6rem}
+#app h2:not(:first-child){margin-top:14vh}
+#app .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;margin-bottom:1.6rem}
+#app .head h2{margin:0}
+.rows{list-style:none;padding:0}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:.5rem 1.2rem;align-items:center;padding:1.3rem 0;border-top:1px solid rgba(0,78,100,.22)}
+.row:last-child{border-bottom:1px solid rgba(0,78,100,.22)}
+.row .ar{font:300 1.7rem/1 var(--ar);min-width:4.4rem}
+.row .nm{font-weight:400}
+.row small{display:block;font-weight:300;font-size:.9rem;opacity:.7}
+.row .st{font-size:.95rem;opacity:.8;text-align:right}
+.row.live .st,.row.live .nm{font-weight:500;opacity:1}
+.row .act{grid-column:1/-1;display:flex;gap:.7rem;flex-wrap:wrap}
+.row img{grid-column:1/-1;width:100%;border-radius:.8rem}
+.row.muted{display:block;opacity:.7}
+.pl{font:200 2rem/1 var(--lat);min-width:2.2rem}
+.pt{font:200 1.8rem/1 var(--lat);font-variant-numeric:tabular-nums}
+.big{font-stretch:125%;font-weight:200;font-size:clamp(2.4rem,9vw,4rem);line-height:1.1;margin-bottom:.6rem}
+.plain{list-style:none;padding:0;margin-top:.8rem;opacity:.75;font-size:.95rem}
+#me p{margin-bottom:.3rem}
+
+button,.btn{min-height:44px;padding:.55em 1.3em;border:1px solid currentColor;border-radius:99px;background:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin:0}
+button.solid{background:var(--deep);color:var(--mist);border-color:var(--deep)}
+button.ghost{border-color:transparent;text-decoration:underline;text-underline-offset:.25em}
+button:disabled{opacity:.4;cursor:default}
+label{display:grid;gap:.3rem;margin:1rem 0;font-size:.95rem}
+label.btn{display:inline-flex;margin:0}
+input,select{min-height:44px;padding:.4em .1em;border:0;border-bottom:1px solid currentColor;background:none;border-radius:0}
+select option{color:#00303D}
+.settings{margin-top:1.4rem}
+.btns{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1.4rem}
+#auth-msg{margin-top:.8rem;min-height:1.6em}
+
+/* ── Hinweis und Dialoge ── */
+#toast{position:fixed;left:50%;bottom:max(1.2rem,env(safe-area-inset-bottom));transform:translateX(-50%);max-width:min(92vw,28rem);
+  padding:.85rem 1.3rem;border-radius:1rem;background:var(--deep);color:var(--mist);text-align:center;font-size:.95rem;z-index:50}
+dialog{margin:auto;width:min(92vw,26rem);max-height:92svh;overflow:auto;border:0;border-radius:1.4rem;padding:1.8rem;background:var(--deep-900);color:var(--mist)}
+dialog::backdrop{background:rgba(0,0,0,.85)}
+dialog h3{font-stretch:125%;font-weight:200;font-size:1.6rem;margin-bottom:.6rem}
+dialog img{display:block;width:100%;border-radius:.8rem;margin:.9rem 0}
+dialog .rows .row{border-color:rgba(224,229,233,.22)}
+dialog .rows .row:last-child{border-bottom-color:rgba(224,229,233,.22)}
+dialog .solid{background:var(--mist);color:var(--deep);border-color:var(--mist)}
+.sh-actions{display:grid;gap:.7rem;margin-top:1.1rem}
+</style>
+</head>
+<body>
+
+<div id="smooth-wrapper"><div id="smooth-content">
+
+  <!-- Bühne: gepinnt, das Handy wandert -->
+  <section class="stage" aria-label="Vorstellung">
+    <div class="halo" aria-hidden="true"></div>
+    <header class="brand"><h1>Waqt</h1><span class="ar" lang="ar">وقت</span></header>
+
+    <div class="phone" aria-hidden="true">
+      <div class="tilt"><div class="body"><div class="screen">
+        <svg id="dial" xmlns="http://www.w3.org/2000/svg"></svg>
+        <p id="next" class="next"></p>
+      </div></div></div>
+    </div>
+
+    <p class="copy c1">Diese Uhr hat keine Zahlen. Die fünf Gebete sitzen dort, wo sie wirklich beginnen.</p>
+    <p class="copy c2">Pünktlich in den ersten fünf Minuten: 100 Punkte. In der Moschee: 450.</p>
+    <p class="copy c3">Vier Freunde, eine Rangliste, ein Wettstreit im Guten.</p>
+  </section>
+
+  <!-- App-Bereich -->
+  <section id="app"><div class="wrap">
+
+    <div id="auth" hidden>
+      <h2 data-speed="0.94">Anmelden</h2>
+      <form id="login">
+        <label>E-Mail<input type="email" name="email" autocomplete="username" required></label>
+        <label>Passwort<input type="password" name="pw" autocomplete="current-password" required></label>
+        <button class="solid">Anmelden</button>
+        <p id="auth-msg" role="alert"></p>
+      </form>
+    </div>
+
+    <div id="main">
+      <div class="head"><h2 data-speed="0.94">Heute</h2><button id="locate" class="ghost" type="button">Standort freigeben</button></div>
+      <ol id="today" class="rows"></ol>
+
+      <h2 data-speed="0.94">Rangliste</h2>
+      <ol id="board" class="rows"></ol>
+
+      <h2 data-speed="0.94">Profil</h2>
+      <div id="me"></div>
+      <div class="settings">
+        <label>Asr-Berechnung
+          <select id="school"><option value="">Standard der API</option><option value="0">Shafi, Maliki, Hanbali</option><option value="1">Hanafi</option></select>
+        </label>
+        <label>Berechnungsmethode
+          <select id="method"><option value="">Standard der API</option><option value="3">Muslim World League</option><option value="2">ISNA</option><option value="4">Umm al-Qura</option><option value="13">Diyanet</option><option value="1">Karachi</option></select>
+        </label>
+        <div class="btns">
+          <button id="set-mosque" type="button">Moschee hier speichern</button>
+          <button id="logout" class="ghost" type="button" hidden>Abmelden</button>
+        </div>
+      </div>
+    </div>
+
+  </div></section>
+
+</div></div>
+
+<!-- außerhalb des Smoothers, damit nichts durch dessen Transform verrutscht -->
+<p id="toast" role="status" hidden></p>
+
+<dialog id="sheet" aria-labelledby="sh-title">
+  <h3 id="sh-title"></h3>
+  <p id="sh-text" role="status"></p>
+  <img id="sh-img" alt="Foto deines Gebetsteppichs" hidden>
+  <div class="sh-actions">
+    <label class="btn">Teppich fotografieren<input id="sh-photo" type="file" accept="image/*" capture="environment" hidden></label>
+    <button id="sh-go" class="solid" type="button" disabled>Handy weglegen und beten</button>
+    <button id="sh-cancel" class="ghost" type="button">Abbrechen</button>
+  </div>
+</dialog>
+
+<dialog id="friend" aria-labelledby="fr-name">
+  <h3 id="fr-name"></h3>
+  <ol id="fr-list" class="rows"></ol>
+  <div class="sh-actions"><button id="fr-close" class="ghost" type="button">Schließen</button></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13/dist/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13/dist/ScrollSmoother.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
